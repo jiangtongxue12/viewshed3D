@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <title>demo</title>
+
+    <link rel="stylesheet" href="http://localhost/4.22x/esri/css/main.css" type="text/css" />
+    <script type="text/javascript">
+        var dojoConfig = {
+            packages: [
+                {
+                    "name": "js",
+                    "location": location.pathname.replace(/\/[^/]+$/, "") + "/js"
+                },
+            ]
+        };
+    </script>
+    <script type="module">
+        import * as THREE from './js/three.module.js';
+        window.THREE = THREE;
+    </script>
+    <script type="text/javascript" src="renderers//viewshedAnalysis.js"></script>
+    <script type="text/javascript" src="http://localhost/4.22x/init.js"></script>
+    <style>
+        html,
+        body,
+        #viewDiv {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+        }
+
+        .funPanel {
+            max-height: 900px;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            z-index: 99;
+            display: flex;
+            flex-direction: column;
+            justify-items: center;
+            flex-wrap: nowrap;
+            overflow-y: auto;
+        }
+
+        .drawPanel {
+            position: absolute;
+            top: 10px;
+            left: 80px;
+            z-index: 99;
+        }
+
+        .clearPanel {
+            position: absolute;
+            top: 10px;
+            left: 200px;
+            z-index: 99;
+        }
+
+        .funBtn {
+            padding: 5px 15px;
+            margin: 5px 3px;
+            color: #fff;
+            background-color: cornflowerblue;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* 去掉地图点击蓝色边框 */
+
+        .esri-view .esri-view-surface--inset-outline:focus::after {
+            outline: auto 0px Highlight !important;
+            outline: auto 0px -webkit-focus-ring-color !important;
+        }
+    </style>
+    <script>
+        let view = null;
+        let externalRenderersClass = null;
+        let SpatialReferenceClass = null;
+
+        let viewshedAnalysis = null;
+        let viewshedAnalysisClass = null;
+      
+        let draw = null;
+        let drawAction = null;
+        let drawPoints = [];
+        let GraphicClass = null;
+        let geometryEngineClass = null;
+
+        let PointClass = null;
+        let PolylineClass = null;
+        let PolygonClass = null;
+        let GraphicsLayerClass = null;
+        let webMercatorUtilsClass = null;
+
+        let graLayer = null;
+        let startPoint = [];
+        let endPoint = [];
+
+        let symbolMarker = {
+            type: "simple-marker",
+            color: [255, 0, 0],
+            outline: {
+                color: [255, 255, 255],
+                width: 1
+            }
+        }
+        let symbolLine = {
+            type: "simple-line",
+            color: [0, 150, 0],
+            width: 1.5
+        }
+        var integratedLayer = null;
+        var sceneLayer=null;
+        let jm_1=null;
+        let jm_2=null;
+        let jm_3=null;
+        let jm_4=null;
+        let glMatrixClass=null;
+        require([
+            "esri/Map",
+            "esri/layers/TileLayer",
+            "esri/layers/FeatureLayer",
+            "esri/views/SceneView",
+            'esri/views/3d/externalRenderers',
+            'js/gl-matrix-min',
+            'esri/geometry/Point',
+            'esri/geometry/Polyline',
+            'esri/geometry/Polygon',
+            'esri/geometry/support/webMercatorUtils',
+
+            "esri/geometry/SpatialReference",
+            "esri/layers/GraphicsLayer",
+            "esri/layers/SceneLayer",
+            "esri/layers/IntegratedMeshLayer",
+            "esri/layers/BuildingSceneLayer",
+            "esri/Graphic",
+            "esri/request",
+            "esri/views/draw/Draw",
+            "esri/geometry/geometryEngine"
+        ], function (
+            Map,
+            TileLayer,
+            FeatureLayer,
+            SceneView,
+            externalRenderers,
+            glMatrix,
+            Point,
+            Polyline,
+            Polygon,
+            webMercatorUtils,
+
+            SpatialReference,
+            GraphicsLayer,
+            SceneLayer,
+            IntegratedMeshLayer,
+            BuildingSceneLayer,
+            Graphic,
+            esriRequest,
+            Draw,
+            geometryEngine
+        ) {
+                externalRenderersClass = externalRenderers;
+                SpatialReferenceClass = SpatialReference;
+                GraphicClass = Graphic;
+                PointClass = Point;
+                PolylineClass = Polyline;
+                PolygonClass = Polygon;
+                geometryEngineClass = geometryEngine;
+                GraphicsLayerClass = GraphicsLayer;
+                webMercatorUtilsClass = webMercatorUtils;
+
+                glMatrixClass=glMatrix;
+                viewshedAnalysisClass = ViewshedAnlysis;
+                // var baselayer = new TileLayer({
+                //     url: "http://map.geoq.cn/ArcGIS/rest/services/ChinaOnlineStreetPurplishBlue/MapServer",
+                // });
+                integratedLayer = new IntegratedMeshLayer({
+                    //url: 'https://portal90.esrish.gis/server/rest/services/Hosted/3m_opt/SceneServer/layers/0'
+                    url:'https://bim.arcgisonline.cn/server/rest/services/Hosted/Production_2/SceneServer/layers/0'
+                });
+                sceneLayer=new SceneLayer({
+                    url:'https://portal90.esrish.gis/server/rest/services/Hosted/xh_building/SceneServer/layers/0'
+                });
+
+                jm_1=new SceneLayer({
+                    url:'https://portal90.esrish.gis/server/rest/services/Hosted/DX/SceneServer/layers/0'
+                });
+                jm_2=new SceneLayer({
+                    url:'https://portal90.esrish.gis/server/rest/services/Hosted/JZ/SceneServer/layers/0'
+                });
+                jm_3=new SceneLayer({
+                    url:'https://portal90.esrish.gis/server/rest/services/Hosted/XP/SceneServer/layers/0'
+                });
+                jm_4=new SceneLayer({
+                    url:'https://portal90.esrish.gis/server/rest/services/Hosted/ZB/SceneServer/layers/0'
+                });
+                var map = new Map({
+                    //layers: [baselayer]//
+                });
+                view = new SceneView({
+                    container: "viewDiv",
+                    map: map,
+                    //viewingMode: "local",
+                });
+                map.add(integratedLayer);
+                // map.add(jm_1);
+                // map.add(jm_2);
+                // map.add(jm_3);
+                // map.add(jm_4);
+                //map.ground.surfaceColor = "#00192e";
+                view.ui.remove("attribution");
+                //绑定绘制事件
+                draw = new Draw({
+                    view: view
+                });
+                view.when(function () {
+                    view.goTo(integratedLayer.fullExtent);
+                    window.view = view;
+                });
+                view.on('click', function (evt) {
+                    console.log(evt.mapPoint)
+                });
+                graLayer = new GraphicsLayer({});
+                map.add(graLayer);
+            });
+        //执行分析
+        function startAnalysis() {
+            if (viewshedAnalysis) {
+                viewshedAnalysis.dispose();
+                graLayer.removeAll();
+                externalRenderersClass.remove(view, viewshedAnalysis);
+                viewshedAnalysis=null;
+            }
+            viewshedAnalysis = new viewshedAnalysisClass({
+                view,
+                layers: [integratedLayer],//jm_1,jm_2,jm_3,jm_4
+
+                Point: PointClass,
+                Polyline: PolylineClass,
+                Polygon: PolygonClass,
+                geometryEngine: geometryEngineClass,
+                Graphic: GraphicClass,
+                GraphicsLayer: GraphicsLayerClass,
+                externalRenderers: externalRenderersClass,
+                webMercatorUtils: webMercatorUtilsClass,
+                glMatrix:glMatrixClass,
+
+                startPoint,
+                endPoint, 
+                dataType: 'scene',//白模scene_bm,精模scene_jm,倾斜integrated
+                visibleColor: 'rgb(0,153,51)',
+                inVisibleColor: 'rgb(255,0,0)',
+            });
+            externalRenderersClass.add(view, viewshedAnalysis);
+        }
+        //绘制视线（起点、终点）
+        function drawEvent() {
+            if (drawPoints.length == 2) {
+                drawPoints = [];
+                graLayer.removeAll();
+            };
+            drawAction = draw.create("point", { mode: "click" });
+            drawAction.on("draw-complete", function (evt) {
+                showDrawGeo(evt)
+            });
+        }
+        function showDrawGeo(evt) {
+            if (drawPoints.length < 2) {
+                const inputGraphic = new GraphicClass({
+                    geometry: new PointClass({
+                        x: evt.vertices[0][0],
+                        y: evt.vertices[0][1],
+                        z: evt.vertices[0][2],
+                        hasZ: true,
+                        spatialReference: view.spatialReference
+                    }),
+                    symbol: symbolMarker
+                });
+
+                graLayer.add(inputGraphic);
+                drawPoints.push(evt.vertices[0]);
+                if (drawPoints.length == 2) {
+                    drawAction.destroy();
+                    drawAction = null;
+                    let polyline = {
+                        type: "polyline", // autocasts as new Polyline()
+                        paths: drawPoints,
+                        spatialReference: view.spatialReference
+                    }
+                    const inputGraphic = new GraphicClass({
+                        geometry: polyline,
+                        symbol: symbolLine
+                    });
+                    graLayer.add(inputGraphic);
+                } else {
+                    drawAction.destroy();
+                    drawAction = null;
+                    drawAction = draw.create("point", { mode: "click" });
+                    drawAction.on("draw-complete", function (evt) {
+                        showDrawGeo(evt);
+                    })
+                }
+            }
+        }
+        function funClickEvent(type) {
+            switch (type) {
+                case 'viewshed':
+                    if (drawPoints.length < 2) { alert('请先绘制视线'); return; }
+                    startPoint = drawPoints[0];
+                    endPoint = drawPoints[1];
+                    startAnalysis();
+                    break;
+                case 'clear':
+                    graLayer.removeAll();
+                    drawPoints = [];
+                    if (viewshedAnalysis) {
+                        viewshedAnalysis.dispose();
+                        externalRenderersClass.remove(view, viewshedAnalysis);
+                        viewshedAnalysis=null;
+                    }
+                    break;
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div id="viewDiv">
+        <div class='funPanel'>
+            <span class='funBtn' onmousedown="funClickEvent('viewshed')">可视域分析</span>
+        </div>
+        <div class='drawPanel'>
+            <span class='funBtn' onmousedown="drawEvent()">绘制视线</span>
+        </div>
+        <div class='clearPanel'>
+            <span class='funBtn' onmousedown="funClickEvent('clear')">清除</span>
+        </div>
+    </div>
+
+</body>
+
+</html>
